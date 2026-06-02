@@ -23,22 +23,21 @@ def build() -> Path:
     if BUILD.exists():
         shutil.rmtree(BUILD)
     (BUILD / "circuit-cleaner" / "src").mkdir(parents=True)
-    (BUILD / "circuit-cleaner" / "assets").mkdir(parents=True)
 
     # Root-level Space files.
     for name in ("app.py", "requirements.txt", "README.md"):
         shutil.copy2(HF_SPACE / name, BUILD / name)
 
-    # Package + sample assets, mirroring the repo layout.
+    # Package only, mirroring the repo layout.
+    # NOTE: the sample circuit maps in assets/samples/ are intentionally NOT
+    # bundled — the Space is public and we don't want those images exposed. The
+    # demo guards gr.Examples behind `if samples:`, so the Space simply renders
+    # without an examples section; samples stay local for tests/dev.
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc")
     shutil.copytree(
         MEMBER / "src" / "circuit_cleaner",
         BUILD / "circuit-cleaner" / "src" / "circuit_cleaner",
         ignore=ignore,
-    )
-    shutil.copytree(
-        MEMBER / "assets" / "samples",
-        BUILD / "circuit-cleaner" / "assets" / "samples",
     )
     return BUILD
 
