@@ -1,6 +1,6 @@
 # Circuit Map Cleaner
 
-Tool #1 of [race-engineer-tools](../README.md). Cleans circuit-map images:
+Part of [race-engineer-tools](../README.md). Cleans circuit-map images:
 removes text, labels, gray secondary-track regions and off-circuit clutter,
 leaving a clean white-background outline — black track plus red direction
 markers.

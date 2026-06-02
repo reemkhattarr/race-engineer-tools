@@ -1,4 +1,4 @@
-"""Circuit map image cleaner — tool #1 of the race-engineer-tools suite."""
+"""Circuit map image cleaner — part of the race-engineer-tools project."""
 
 from circuit_cleaner.clean_circuit import clean_circuit_image
 

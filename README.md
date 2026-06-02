@@ -7,9 +7,7 @@ locally or shipped as lightweight web demos.
 > Sibling project to [`f1-ml`](../f1-ml), which holds the ML portfolio. This
 > repo is deliberately separate: it's tooling for the engineer, not modelling.
 
-## Tools
-
-### 1. Circuit Map Cleaner — `circuit-cleaner/`
+## Circuit Map Cleaner — `circuit-cleaner/`
 
 Turns a messy circuit-map image (text, labels, gray secondary tracks,
 off-circuit clutter) into a clean white-background outline: black track plus red

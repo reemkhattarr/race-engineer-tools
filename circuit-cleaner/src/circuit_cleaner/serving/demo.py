@@ -1,4 +1,4 @@
-"""Gradio demo for the circuit-map cleaner (tool #1 of race-engineer-tools).
+"""Gradio demo for the circuit-map cleaner (part of race-engineer-tools).
 
 A race engineer uploads a circuit-map image; the tool strips text, labels,
 gray secondary-track regions and off-circuit clutter, leaving a clean white-
@@ -58,8 +58,7 @@ def build_demo() -> gr.Blocks:
             "Upload a circuit-map image. The tool removes text, labels, gray "
             "secondary-track regions and off-circuit clutter, leaving a clean "
             "white-background outline (black track, red direction markers) you "
-            "can download.\n\n"
-            "_Tool #1 of the race-engineer-tools suite._"
+            "can download."
         )
         with gr.Row():
             inp = gr.Image(

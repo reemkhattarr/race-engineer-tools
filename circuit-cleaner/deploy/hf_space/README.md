@@ -18,5 +18,5 @@ tool removes text, labels, gray secondary-track regions and off-circuit clutter,
 keeping only the black track and red direction markers. Preview the result and
 download it.
 
-Tool #1 of the **race-engineer-tools** suite. Source and write-up: see the
+Part of the **race-engineer-tools** project. Source and write-up: see the
 project repository.
