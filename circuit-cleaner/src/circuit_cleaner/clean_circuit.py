@@ -254,10 +254,16 @@ def restore_near_track_dark_details(raw_dark, dark_clean):
     return restored
 
 
-def filter_red_near_circuit(red_mask, dark_mask):
-    """Keep only red pixels within RED_PROXIMITY px of a circuit line."""
+def filter_red_near_circuit(red_mask, dark_mask, proximity=RED_PROXIMITY):
+    """Keep only red pixels within `proximity` px of a circuit line.
+
+    RED_PROXIMITY is expressed in *original-image* pixels; callers working on an
+    upscaled image must pass proximity scaled by the upscale factor, otherwise a
+    large marker (e.g. a direction arrow) gets clipped where it extends beyond
+    the un-scaled radius from the track.
+    """
     kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE, (RED_PROXIMITY * 2 + 1, RED_PROXIMITY * 2 + 1)
+        cv2.MORPH_ELLIPSE, (proximity * 2 + 1, proximity * 2 + 1)
     )
     return cv2.bitwise_and(red_mask, cv2.dilate(dark_mask, kernel))
 
@@ -1022,8 +1028,12 @@ def clean_circuit_image(input_path, output_path, gemini_key=None, add_numbers=Fa
 
     # 7. Red markers filtered to circuit proximity, then by shape: keep solid
     #    direction arrows, drop thin red corner-marker arcs/rings.
+    #    Proximity is scaled by the upscale factor so large markers (e.g. a
+    #    direction arrow at high upscale) are not clipped where they extend
+    #    beyond a fixed 60 px from the track.
+    prox_px      = int(round(RED_PROXIMITY * max(1.0, _up_scale)))
     red_mask     = make_red_mask(img_bgr)
-    red_filtered = filter_red_near_circuit(red_mask, dark_clean)
+    red_filtered = filter_red_near_circuit(red_mask, dark_clean, prox_px)
     red_filtered = drop_arc_shaped_red(red_filtered)
 
     # Restore arrow stroke thickness lost during upscaling.
@@ -1037,12 +1047,12 @@ def clean_circuit_image(input_path, output_path, gemini_key=None, add_numbers=Fa
         )
         red_filtered = cv2.dilate(red_filtered, k_red)
         # Re-apply the circuit-proximity constraint so dilation doesn't leak
-        # red pixels far from the track.
+        # red pixels far from the track (same scaled radius as step 7).
         circuit_prox = cv2.dilate(
             dark_clean,
             cv2.getStructuringElement(
                 cv2.MORPH_ELLIPSE,
-                (RED_PROXIMITY * 2 + 1, RED_PROXIMITY * 2 + 1)
+                (prox_px * 2 + 1, prox_px * 2 + 1)
             )
         )
         red_filtered = cv2.bitwise_and(red_filtered, circuit_prox)

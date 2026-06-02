@@ -6,7 +6,11 @@ import cv2
 import numpy as np
 import pytest
 
-from circuit_cleaner.clean_circuit import clean_circuit_image, drop_arc_shaped_red
+from circuit_cleaner.clean_circuit import (
+    clean_circuit_image,
+    drop_arc_shaped_red,
+    filter_red_near_circuit,
+)
 
 
 def test_clean_circuit_image_writes_output(sample_image: Path, tmp_path: Path) -> None:
@@ -51,6 +55,25 @@ def test_drop_arc_shaped_red_keeps_arrow_drops_arcs() -> None:
     assert _has_pixels(drop_arc_shaped_red(arrow))  # solid arrow kept
     assert not _has_pixels(drop_arc_shaped_red(arc))  # open arc dropped
     assert not _has_pixels(drop_arc_shaped_red(ring))  # ring dropped
+
+
+def test_red_proximity_scales_to_keep_large_markers() -> None:
+    """A wider proximity keeps a marker that a too-tight radius would clip.
+
+    Guards the upscale-clipping fix: RED_PROXIMITY is in original-image pixels,
+    so on an upscaled image the radius must scale up or far parts of a big
+    marker (e.g. a direction arrow) get cut off.
+    """
+    dark = np.zeros((200, 200), np.uint8)
+    dark[10, :] = 255  # a horizontal "track" line near the top
+    red = np.zeros((200, 200), np.uint8)
+    red[120:160, 80:120] = 255  # a solid marker ~110-150 px below the line
+
+    tight = filter_red_near_circuit(red, dark, proximity=30)
+    wide = filter_red_near_circuit(red, dark, proximity=180)
+
+    assert (tight > 0).sum() == 0  # marker clipped entirely at a tight radius
+    assert (wide > 0).sum() == int((red > 0).sum())  # fully kept when scaled up
 
 
 def _red_pixel_count(image_path: Path) -> int:
