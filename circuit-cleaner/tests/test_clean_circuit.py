@@ -4,6 +4,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from circuit_cleaner.clean_circuit import clean_circuit_image, drop_arc_shaped_red
 
@@ -50,3 +51,33 @@ def test_drop_arc_shaped_red_keeps_arrow_drops_arcs() -> None:
     assert _has_pixels(drop_arc_shaped_red(arrow))  # solid arrow kept
     assert not _has_pixels(drop_arc_shaped_red(arc))  # open arc dropped
     assert not _has_pixels(drop_arc_shaped_red(ring))  # ring dropped
+
+
+def _red_pixel_count(image_path: Path) -> int:
+    img = cv2.imread(str(image_path))
+    assert img is not None
+    r, g, b = img[:, :, 2], img[:, :, 1], img[:, :, 0]
+    return int(((r > 150) & (g < 90) & (b < 90)).sum())
+
+
+_SAMPLES = Path(__file__).resolve().parents[1] / "assets" / "samples"
+
+
+def test_red_corner_rings_removed_on_f(tmp_path: Path) -> None:
+    """f.jpeg's red corner rings are gone, while a.jpeg keeps its red arrow.
+
+    Real-data regression for both directions of the shape filter: arcs/rings
+    dropped (f), solid direction arrows preserved (a).
+    """
+    f_in = _SAMPLES / "f.jpeg"
+    a_in = _SAMPLES / "a.jpeg"
+    if not (f_in.exists() and a_in.exists()):
+        pytest.skip("sample images missing")
+
+    f_out = tmp_path / "f_cleaned.png"
+    a_out = tmp_path / "a_cleaned.png"
+    assert clean_circuit_image(str(f_in), str(f_out), add_numbers=False)
+    assert clean_circuit_image(str(a_in), str(a_out), add_numbers=False)
+
+    assert _red_pixel_count(f_out) == 0  # all red corner rings removed
+    assert _red_pixel_count(a_out) > 0  # red start/finish arrow preserved
