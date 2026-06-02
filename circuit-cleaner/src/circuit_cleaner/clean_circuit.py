@@ -65,6 +65,8 @@ DARK_THRESHOLD_MAX = 140
 RED_MIN_R          = 140
 RED_MAX_GB         = 90
 RED_PROXIMITY      = 60      # px — red pixels further than this from circuit are removed
+RED_MIN_SOLIDITY   = 0.62    # red blobs below this are thin arcs/rings (corner markers), not arrows
+RED_SHAPE_MIN_AREA = 60      # px — ignore tiny red specks when judging shape (noise, not markers)
 CC_KEEP_FRAC       = 0.015   # min area as fraction of largest dark component
 CIRCUIT_BB_PAD     = 0.08    # fractional padding for off-circuit title removal
 HOUGH_PARAM2       = 18      # accumulator threshold — lower = more detections
@@ -258,6 +260,34 @@ def filter_red_near_circuit(red_mask, dark_mask):
         cv2.MORPH_ELLIPSE, (RED_PROXIMITY * 2 + 1, RED_PROXIMITY * 2 + 1)
     )
     return cv2.bitwise_and(red_mask, cv2.dilate(dark_mask, kernel))
+
+
+def drop_arc_shaped_red(red_mask):
+    """Drop thin open-arc / ring red blobs (corner markers); keep solid arrows.
+
+    Direction markers (arrowheads / chevrons) are near-solid: their pixel area
+    nearly fills their convex hull, so solidity = area / hull_area is high
+    (~0.9-1.0 on the sample circuits). Corner-number markers drawn as thin red
+    arcs or rings have low solidity — the convex hull is a full disk while the
+    stroke is only a sliver. We keep high-solidity blobs (arrows) and drop the
+    low-solidity ones (corner markers). Tiny specks below RED_SHAPE_MIN_AREA are
+    left untouched (too small to classify; proximity already vetted them).
+    """
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(
+        (red_mask > 0).astype(np.uint8), connectivity=8
+    )
+    kept = np.zeros_like(red_mask)
+    for i in range(1, num):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        comp = (labels == i).astype(np.uint8)
+        if area < RED_SHAPE_MIN_AREA:
+            kept[comp > 0] = 255
+            continue
+        contours, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        hull_area = max(cv2.contourArea(cv2.convexHull(np.vstack(contours))), 1.0)
+        if area / hull_area >= RED_MIN_SOLIDITY:
+            kept[comp > 0] = 255
+    return kept
 
 
 # ── Circle OCR ────────────────────────────────────────────────────────────────
@@ -990,9 +1020,11 @@ def clean_circuit_image(input_path, output_path, gemini_key=None, add_numbers=Fa
         print(f"    Total rings for erasure: {len(all_circles)} "
               f"({labeled} OCR-labeled)")
 
-    # 7. Red markers filtered to circuit proximity
+    # 7. Red markers filtered to circuit proximity, then by shape: keep solid
+    #    direction arrows, drop thin red corner-marker arcs/rings.
     red_mask     = make_red_mask(img_bgr)
     red_filtered = filter_red_near_circuit(red_mask, dark_clean)
+    red_filtered = drop_arc_shaped_red(red_filtered)
 
     # Restore arrow stroke thickness lost during upscaling.
     # LANCZOS4 blends arrow edge pixels with the white background, pushing them
