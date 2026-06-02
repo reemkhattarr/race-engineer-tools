@@ -1,0 +1,30 @@
+[project]
+name = "circuit-cleaner"
+version = "0.1.0"
+description = "Clean circuit-map images: remove text, gray track regions and clutter."
+requires-python = "==3.11.*"
+dependencies = [
+    "gradio>=6.15.2",
+    "numpy>=2.0",
+    "opencv-python-headless>=4.10",
+    "pillow>=10.0",
+]
+
+# The --add-numbers corner-numbering CLI path needs OCR; it is optional and
+# currently unmaintained. Install with `uv sync --extra add-numbers` if needed.
+[project.optional-dependencies]
+add-numbers = [
+    "pytesseract>=0.3.13",
+    "google-genai>=1.73.1",
+    "python-dotenv>=1.0",
+]
+
+[project.scripts]
+clean-circuit = "circuit_cleaner.clean_circuit:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/circuit_cleaner"]

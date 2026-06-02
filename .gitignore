@@ -1,0 +1,34 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# --- uv / virtualenv ---
+.venv/
+# uv.lock IS committed (reproducible installs) — do not ignore it.
+
+# --- Tooling caches ---
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.pyright/
+.coverage
+htmlcov/
+
+# --- Generated outputs ---
+# Cleaned images produced by the tool/CLI are derived artifacts, not source.
+*_cleaned*
+**/space_build/
+
+# --- Env & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
