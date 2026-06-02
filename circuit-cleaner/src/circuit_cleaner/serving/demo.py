@@ -61,21 +61,31 @@ def build_demo() -> gr.Blocks:
             "can download."
         )
         with gr.Row():
-            inp = gr.Image(
-                type="filepath",
-                label="Upload circuit map",
-                sources=["upload"],
-            )
             with gr.Column():
-                out_img = gr.Image(type="filepath", label="Cleaned (preview)")
-                out_file = gr.File(label="Download cleaned image")
-        btn = gr.Button("Clean", variant="primary")
+                inp = gr.Image(
+                    type="filepath",
+                    label="Upload circuit map",
+                    sources=["upload"],
+                )
+                btn = gr.Button("Clean", variant="primary")
+            with gr.Column():
+                out_img = gr.Image(
+                    type="filepath",
+                    label="Cleaned",
+                    interactive=False,
+                )
+                download = gr.DownloadButton(
+                    "Download cleaned image",
+                    variant="secondary",
+                    visible=False,
+                )
 
-        def _run(path: str | None) -> tuple[str, str]:
+        def _run(path: str | None) -> tuple[str, gr.DownloadButton]:
             result = clean_uploaded_image(path)
-            return result, result  # preview + download share the same file
+            # Reveal the download button now that there's a file to fetch.
+            return result, gr.DownloadButton(value=result, visible=True)
 
-        btn.click(_run, inputs=inp, outputs=[out_img, out_file])
+        btn.click(_run, inputs=inp, outputs=[out_img, download])
 
         samples = _sample_images()
         if samples:
