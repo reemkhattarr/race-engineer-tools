@@ -44,3 +44,11 @@ demo:
 # Clean image(s) from the CLI, e.g. `just clean circuit-cleaner/assets/samples/a.jpeg`.
 clean *IMAGES:
     uv run clean-circuit {{IMAGES}}
+
+# Assemble the deployable Hugging Face Space bundle (-> deploy/space_build).
+build-space:
+    uv run python circuit-cleaner/deploy/build_space.py
+
+# Push the bundle live to Hugging Face Spaces (run `just build-space` first).
+deploy: build-space
+    uv run hf upload reemkhattar/circuit-map-cleaner circuit-cleaner/deploy/space_build . --repo-type space
