@@ -5,8 +5,9 @@ removes text, labels, corner-number rings, gray secondary-track regions, logos,
 scale bars and other off-circuit clutter, leaving a clean white-background
 outline — black track plus red direction markers.
 
-Works on light or dark maps, any track colour, and any resolution (a 450 px
-thumbnail and a 4000 px poster go through the same rules). A typical map takes
+Works on white, gray, tinted, coloured, dark and transparent (PNG/WebP)
+backgrounds, any track colour that contrasts with its background, and any
+resolution (a 450 px thumbnail and a 4000 px poster go through the same rules). A typical map takes
 well under a second.
 
 ## Use it
@@ -32,20 +33,22 @@ uv run clean-circuit *.png --no-thin-lines --size 3000
 ### Python
 
 ```python
-import cv2
 from circuit_cleaner import Settings, clean_circuit
+from circuit_cleaner.clean_circuit import load_image
 
-out = clean_circuit(cv2.imread("map.png"), Settings(keep_thin_lines=False))
+out = clean_circuit(load_image("map.png"), Settings(keep_thin_lines=False))  # BGR array
 ```
 
 ## How it works
 
 Everything lives in [`src/circuit_cleaner/clean_circuit.py`](src/circuit_cleaner/clean_circuit.py)
-(~340 lines). There are no fixed pixel constants: the tool first measures the
+(~400 lines). There are no fixed pixel constants: the tool first measures the
 track's stroke width **W** and expresses every size as a multiple of it.
 
-1. **Background.** The border colour tells whether the map is light or dark;
-   dark maps are inverted internally.
+1. **Background.** Files are loaded with Pillow (EXIF rotation, 16-bit,
+   palette, WebP/GIF; transparency composited onto a contrasting backdrop).
+   Each pixel's darkness is then its contrast with the border colour, so a
+   white track on black or a black track on beige both become dark-on-white.
 2. **Ink.** Pixels clearly darker than the background, split with Otsu so that
    lighter gray layouts and watermarks fall out on their own. Red is handled
    separately.
