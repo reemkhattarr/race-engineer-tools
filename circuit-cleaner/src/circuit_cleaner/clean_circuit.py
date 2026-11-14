@@ -6,7 +6,10 @@ in black and the red direction markers next to it.
 
 How it works, in one pass and without fixed pixel constants:
 
-1. Look at the image border to learn the background colour (light or dark).
+1. Load any format (transparent PNG/WebP composited onto a contrasting
+   backdrop) and measure each pixel's contrast with the background colour,
+   so white, gray, tinted, coloured and dark canvases all become "dark ink
+   on white".
 2. Measure the track's stroke width ``W`` from the distance transform. Every
    size below is a multiple of ``W``, so the same rules work on a 450 px
    thumbnail and a 4000 px poster, with thin or thick tracks.
@@ -34,6 +37,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+from PIL import Image, ImageOps
 
 TRACK_BGR = (0, 0, 0)
 RED_BGR = (0, 0, 210)
@@ -89,20 +93,33 @@ def _reconstruct(mask: np.ndarray, seed: np.ndarray) -> np.ndarray:
 
 
 def _darkness(img: np.ndarray) -> tuple[np.ndarray, float]:
-    """Gray image where ink is low and background ~255, whatever the scheme.
+    """Gray image where ink is low and background is 255, whatever the scheme.
 
-    Returns (lum, bg). Dark-background maps are inverted so that the rest of
-    the pipeline only ever deals with "dark ink on a light background".
+    Each pixel's darkness is its contrast with the background colour (median
+    of the image border): lightness contrast normally, so a white track on
+    black and a black track on beige both come out "dark ink on white", and
+    lighter gray layouts stay light. If lightness alone can't see the track
+    (a coloured track on an equally bright canvas) full Lab colour distance
+    is used instead. Returns (lum, bg) with bg = 255.
     """
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
-    b = max(2, min(gray.shape) // 50)
-    border = np.concatenate(
-        [gray[:b].ravel(), gray[-b:].ravel(), gray[:, :b].ravel(), gray[:, -b:].ravel()]
-    )
-    bg = float(np.median(border))
-    if bg < 128:
-        gray, bg = 255.0 - gray, 255.0 - bg
-    return gray, bg
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+    lab[..., 0] *= 100.0 / 255.0  # CIE L in 0..100 so distances are comparable
+    b = max(2, min(img.shape[:2]) // 50)
+    frame = (lab[:b], lab[-b:], lab[:, :b], lab[:, -b:])
+    border = np.concatenate([f.reshape(-1, 3) for f in frame])
+    diff = lab - np.median(border, axis=0)
+
+    def reference(dist: np.ndarray) -> float:
+        fg = dist[dist > 25.0]
+        return float(np.percentile(fg, 90)) if fg.size else 0.0
+
+    dist = np.abs(diff[..., 0])
+    ref = reference(dist)
+    if ref < 37.5:
+        dist = np.linalg.norm(diff, axis=2)
+        ref = reference(dist)
+    ref = max(ref, 50.0)
+    return 255.0 * (1.0 - np.clip(dist / ref, 0.0, 1.0)), 255.0
 
 
 def _red_mask(img: np.ndarray) -> np.ndarray:
@@ -294,11 +311,49 @@ def clean_circuit(img_bgr: np.ndarray, cfg: Settings = DEFAULT) -> np.ndarray:
     return out
 
 
+def load_image(path: str | Path) -> np.ndarray | None:
+    """Load any common raster file as 8-bit BGR, or None if it can't be read.
+
+    Handles EXIF rotation, 16-bit / float / palette images, the first frame of
+    animated GIF/WebP, and transparency: transparent pixels are composited
+    onto white, or onto black when the visible content is itself light (a
+    white track on a transparent canvas), so the track never vanishes.
+    """
+    try:
+        with Image.open(path) as im:
+            im.seek(0)
+            im = ImageOps.exif_transpose(im)
+            if im.mode.startswith("I") or im.mode == "F":
+                arr = np.asarray(im).astype(np.float64)
+                hi = float(arr.max()) if arr.size else 1.0
+                scale = 255.0 if hi <= 1.0 else 255.0 / (65535.0 if hi > 255 else 255.0)
+                gray = np.clip(arr * scale, 0, 255).astype(np.uint8)
+                return cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            if im.mode not in ("RGBA", "LA", "PA") and "transparency" not in im.info:
+                return cv2.cvtColor(np.asarray(im.convert("RGB")), cv2.COLOR_RGB2BGR)
+            rgba = np.asarray(im.convert("RGBA")).astype(np.float32)
+    except Exception:
+        return cv2.imread(str(path), cv2.IMREAD_COLOR)
+
+    rgb, alpha = rgba[..., :3], rgba[..., 3:4] / 255.0
+    visible = alpha[..., 0] > 0.5
+    backdrop = 255.0
+    if visible.any() and not visible.all():
+        lum = rgb[visible] @ np.array([0.299, 0.587, 0.114], np.float32)
+        backdrop = 0.0 if float(np.median(lum)) > 160 else 255.0
+    out = np.clip(rgb * alpha + backdrop * (1.0 - alpha), 0, 255).astype(np.uint8)
+    return cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
+
+
 def clean_circuit_image(
     input_path: str | Path, output_path: str | Path, cfg: Settings = DEFAULT
 ) -> bool:
-    """File wrapper around :func:`clean_circuit`. Returns False if unreadable."""
-    img = cv2.imread(str(input_path), cv2.IMREAD_COLOR)
+    """File wrapper around :func:`clean_circuit`. Returns False if unreadable.
+
+    Inputs can be any format Pillow reads (incl. transparent PNG/WebP);
+    outputs other than JPEG/PNG should be given a .png name by the caller.
+    """
+    img = load_image(input_path)
     if img is None:
         print(f"  ERROR: could not read {input_path}")
         return False
@@ -330,7 +385,8 @@ def main(argv: list[str] | None = None) -> int:
     ok = 0
     for path in args.images:
         src = Path(path)
-        dst = src.with_name(f"{src.stem}_cleaned{src.suffix}")
+        suffix = src.suffix if src.suffix.lower() in (".png", ".jpg", ".jpeg") else ".png"
+        dst = src.with_name(f"{src.stem}_cleaned{suffix}")
         if clean_circuit_image(src, dst, cfg):
             ok += 1
             print(f"  {src.name} -> {dst.name}")
