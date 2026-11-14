@@ -44,7 +44,8 @@ def clean_uploaded_image(image_path: str | None, keep_thin_lines: bool = True) -
 def _sample_images() -> list[str]:
     if not _SAMPLES_DIR.is_dir():
         return []
-    return sorted(str(p) for p in _SAMPLES_DIR.glob("*.jpeg"))
+    exts = ("*.jpeg", "*.jpg", "*.png", "*.webp")
+    return sorted(str(p) for e in exts for p in _SAMPLES_DIR.glob(e))
 
 
 def build_demo() -> gr.Blocks:
@@ -55,11 +56,21 @@ def build_demo() -> gr.Blocks:
             "Upload a circuit-map image. The tool removes text, labels, gray "
             "secondary-track regions and off-circuit clutter, leaving a clean "
             "white-background outline (black track, red direction markers) you "
-            "can download. Works on light or dark maps of any size."
+            "can download. White, gray, coloured, dark or transparent backgrounds "
+            "and any image size all work."
         )
         with gr.Row():
             with gr.Column():
-                inp = gr.Image(type="filepath", label="Upload circuit map", sources=["upload"])
+                inp = gr.Image(
+                    type="filepath",
+                    label="Upload circuit map",
+                    sources=["upload"],
+                    # Pass the original file through untouched: the default
+                    # image_mode="RGB" flattens transparent PNGs (usually to
+                    # black), which the cleaner then can't recover from.
+                    image_mode=None,
+                    format="png",
+                )
                 thin = gr.Checkbox(value=True, label="Keep pit lanes / thin attached lines")
                 btn = gr.Button("Clean", variant="primary")
             with gr.Column():
