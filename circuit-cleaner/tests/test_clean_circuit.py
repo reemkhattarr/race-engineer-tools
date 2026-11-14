@@ -10,8 +10,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import pytest
+from PIL import Image
 
-from circuit_cleaner.clean_circuit import Settings, clean_circuit, clean_circuit_image
+from circuit_cleaner.clean_circuit import Settings, clean_circuit, clean_circuit_image, load_image
 
 RAW = Settings(output_min_side=0)  # keep working size so masks line up
 _SAMPLES = Path(__file__).resolve().parents[1] / "assets" / "samples"
@@ -152,3 +153,29 @@ def test_red_corner_rings_removed_on_f_arrow_kept_on_a(tmp_path: Path) -> None:
     assert clean_circuit_image(a_in, tmp_path / "a.png")
     assert _red_pixels(tmp_path / "f.png") == 0
     assert _red_pixels(tmp_path / "a.png") > 0
+
+
+@pytest.mark.parametrize("track_rgb", [(0, 0, 0), (255, 255, 255)])
+def test_transparent_png_track_survives(tmp_path: Path, track_rgb: tuple[int, int, int]) -> None:
+    """Black or white track on a fully transparent canvas is still found."""
+    rgba = np.zeros((500, 700, 4), np.uint8)
+    cv2.ellipse(rgba, (350, 250), (250, 150), 0, 0, 360, (*track_rgb, 255), 14)
+    path = tmp_path / "transparent.png"
+    Image.fromarray(rgba, "RGBA").save(path)
+    img = load_image(path)
+    assert img is not None
+    black, _ = masks(clean_circuit(img, Settings(output_min_side=0, work_min_side=700)))
+    for x, y in [(100, 250), (600, 250), (350, 100), (350, 400)]:
+        assert black[y - 6 : y + 7, x - 6 : x + 7].any(), f"track lost near ({x},{y})"
+    assert not black[240:260, 340:360].any(), "inside of the loop filled"
+
+
+def test_coloured_canvas() -> None:
+    """Black track on a saturated blue canvas with a lighter blue layout."""
+    img = np.full((600, 900, 3), (160, 90, 30), np.uint8)  # BGR blue
+    cv2.ellipse(img, (450, 300), (330, 200), 0, 0, 360, (200, 150, 110), 16)  # light layout
+    cv2.ellipse(img, (450, 300), (300, 180), 0, 0, 360, (0, 0, 0), 16)
+    black, _ = masks(clean_circuit(img, RAW))
+    s = black.shape[1] / 900
+    assert at(black, s, 150, 300) and at(black, s, 750, 300), "track missing"
+    assert not at(black, s, 120, 300), "lighter layout kept"
